@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.dark,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'knyght sync'),
     );
   }
 }
@@ -42,86 +42,257 @@ class _MyHomePageState extends State<MyHomePage> {
   Directory? folder;
   FolderStatus status = FolderStatus.applicationStarted;
 
-  void _setFolderAndStatus(Directory folder) {
+  void _setFolderAndStatus(Directory newFolder) {
     setState(() {
-      folder = folder;
+      folder = newFolder;
       status = FolderStatus.folderRetrieved;
     });
   }
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+
     getFolder().then((f) {
       setState(() {
         folder = f;
-        status = FolderStatus.folderRetrieved;
 
         if (f == null) {
           status = FolderStatus.noFolderInPrefs;
+        } else {
+          status = FolderStatus.folderRetrieved;
         }
       });
     });
-
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: FolderTiles(
-            folder: folder,
-            status: status,
-            setFolderCallback: _setFolderAndStatus
-        ),
-      ),
-    );
   }
-}
 
-class FolderTiles extends StatefulWidget {
-  final Directory? folder;
-  final FolderStatus status;
-  final void Function(Directory) setFolderCallback;
-
-  const FolderTiles({super.key, required this.folder, required this.status, required this.setFolderCallback});
-
-  @override
-  FolderTilesState createState() => FolderTilesState();
-}
-
-class FolderTilesState extends State<FolderTiles> {
   @override
   Widget build(BuildContext context) {
-    if (widget.status == FolderStatus.applicationStarted) {
-      return const CircularProgressIndicator();
-    } else if (widget.status == FolderStatus.noFolderInPrefs) {
-      return InitialiseButton(setFolderCallback: widget.setFolderCallback);
+    if (status == FolderStatus.applicationStarted) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          title: Text(widget.title),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    } else if (status == FolderStatus.noFolderInPrefs) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          title: Text(widget.title),
+        ),
+        body: Center(
+          child: InitialiseFolder(
+              updateFolderCallback: _setFolderAndStatus
+          ),
+        ),
+      );
+    }
+
+    // status == FolderStatus.folderRetrieved
+    if (folder != null) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Theme
+              .of(context)
+              .colorScheme
+              .inversePrimary,
+          title: Text(widget.title),
+        ),
+        body: FolderView(
+            root: folder!,
+        ),
+      );
     } else {
-      final String path = widget.folder.toString();
-      return Text('Grid view has not been implemented yet. Your chosen folder is $path');
-      // return GridView.builder(gridDelegate: gridDelegate, itemBuilder: itemBuilder);
+      // We shouldn't be here.
+      return ErrorWidget(
+          'I should have a folder selected, but I can only find \'null\'.'
+      );
     }
   }
 }
 
-class InitialiseButton extends StatelessWidget {
-  final void Function(Directory) setFolderCallback;
-  const InitialiseButton({super.key, required this.setFolderCallback});
+
+class InitialiseFolder extends StatelessWidget {
+  final void Function(Directory) updateFolderCallback;
+  const InitialiseFolder({super.key, required this.updateFolderCallback});
+
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Text("No folder has been selected yet to synchronise. Choose one now?"),
-        IconButton(
-          icon: const Icon(Icons.folder_open),
+        const Text('Select the folder that you want synchronised.'),
+        ElevatedButton(
           onPressed: () {
-            getFolderOrPrompt().then((folder) {
-              setFolderCallback(folder);
+            getFolderOrPrompt().then((selectedFolder) {
+              if (selectedFolder != null) {
+                updateFolderCallback(selectedFolder);
+              }
             });
           },
+          child: const Row(
+            children: [
+              Icon(Icons.drive_folder_upload),
+              Text('Select Folder'),
+            ],
+          ),
         ),
       ],
     );
+  }
+}
+
+class FolderView extends StatefulWidget {
+  final Directory root;
+  const FolderView({super.key, required this.root});
+
+  @override
+  State<FolderView> createState() => _FolderViewState();
+}
+
+class _FolderViewState extends State<FolderView> {
+  // late Directory currentDirectory;
+  // late Future<List<FileSystemEntity>> directoryList;
+  late DirectoryInfo info;
+
+  @override
+  initState() {
+    super.initState();
+
+    info = DirectoryInfo(widget.root);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: info.directoryList,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const CircularProgressIndicator();
+        } else if (snapshot.connectionState == ConnectionState.done) {
+          List<ElevatedButton> displayList = [
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  info.returnToRoot();
+                });
+              },
+              child: const Row(
+                children: [
+                  Icon(Icons.home),
+                  Text('Home'),
+                ],
+              ),
+            )
+          ];
+          if (snapshot.data != null) {
+            if (snapshot.data!.isEmpty) {
+              return Column(
+                children: [
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        info.returnToRoot();
+                      });
+                    },
+                    child: const Row(
+                      children: [
+                        Icon(Icons.home),
+                        Text('Home'),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    'This directory is empty;',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              );
+            }
+            for (var entity in snapshot.data!) {
+              if (entity is File) {
+                displayList.add(ElevatedButton(
+                  onPressed: null,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.insert_drive_file),
+                      Text(entity.path.split('/').last),
+                    ],
+                  ),
+                ));
+              } else if (entity is Directory) {
+                displayList.add(ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      info.updateCurrentDirectory(entity);
+                    });
+                  },
+                  child: Row(
+                    children: [
+                      const Icon(Icons.folder_open),
+                      Text(entity.path.split('/').last),
+                    ],
+                  ),
+                ));
+              } else {
+                displayList.add(ElevatedButton(
+                  onPressed: null,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.link),
+                      Text(entity.path.split('/').last),
+                    ],
+                  ),
+                ));
+              }
+
+              return ButtonBar(
+                alignment: MainAxisAlignment.start,
+                children: displayList,
+              );
+            }
+          } else {
+            return ErrorWidget(snapshot.error!);
+          }
+        }
+
+        // snapshot.hasError must be true by now.
+        return ErrorWidget(snapshot.error!);
+      },
+    );
+  }
+}
+
+class DirectoryInfo {
+  final Directory root;
+  Directory currentDirectory;
+  Future<List<FileSystemEntity>> directoryList;
+
+  DirectoryInfo(Directory givenRoot)
+    : root = givenRoot,
+      currentDirectory = givenRoot,
+      directoryList = givenRoot.list().toList();
+  // Who even designed this syntax? Why is THIS how you make a constructor?
+  // The IDE doesn't know how to format this.
+  // It's supposed to be an initializer list.
+  // (https://dart.dev/language/constructors#use-an-initializer-list)
+  // But how do you figure it out the first time when your IDE is yelling at you
+  // to initialise you variables? ＼（〇_ｏ）／
+  // And the syntax to have both an initializer list and a function body too?
+  // I'll just not do that, ty.
+
+  void updateCurrentDirectory(Directory dir) {
+    currentDirectory = dir;
+    directoryList = dir.list().toList();
+  }
+
+  void returnToRoot() {
+    updateCurrentDirectory(root);
   }
 }

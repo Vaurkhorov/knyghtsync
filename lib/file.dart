@@ -18,7 +18,7 @@ class NoFolderSelected implements Exception {
   String error = 'No folder was selected.';
 }
 
-Future<Directory> getFolderOrPrompt() async {
+Future<Directory?> getFolderOrPrompt() async {
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   String? path = prefs.getString('folder');
 
@@ -33,5 +33,5 @@ Future<Directory> getFolderOrPrompt() async {
     return Directory(path);
   }
 
-  throw NoFolderSelected();
+  return null;
 }
